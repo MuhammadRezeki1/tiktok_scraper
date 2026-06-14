@@ -547,7 +547,7 @@ class TikTokScraperV58(TikTokCheckpointMixin):
         """Ambil metadata video dari SSR.
         Coba __UNIVERSAL_DATA_FOR_REHYDRATION__ dulu, lalu SIGI_STATE (format lama),
         dengan retry kecil kalau halaman belum sempat ter-hidrasi."""
-        for _attempt in range(2):
+        for _attempt in range(3):
             try:
                 res = self.page.evaluate("""() => {
                     // 1) Format baru: __UNIVERSAL_DATA_FOR_REHYDRATION__
@@ -646,6 +646,75 @@ class TikTokScraperV58(TikTokCheckpointMixin):
             print(Fore.YELLOW + f"   ⚠️  Meta API fallback error: {e}")
         return {"source": "none", "data": {}}
 
+    # ── COUNT TEXT PARSER (angka ringkas dari DOM: 1.2M, 527,3 rb, dll) ──
+    @staticmethod
+    def _parse_count_text(txt) -> int:
+        """Ubah angka tampilan TikTok jadi int.
+        Dukungan: '1.2M' '527.3K' '1,234' (en) & '1,2 jt' '527,3 rb' '1.234' (id)."""
+        if not txt:
+            return 0
+        s = str(txt).strip().lower().replace("\xa0", " ").strip()
+        if not s:
+            return 0
+        # suffix → pengali (urut paling spesifik dulu)
+        suffixes = [
+            ("miliar", 1_000_000_000), ("mlr", 1_000_000_000),
+            ("juta", 1_000_000), ("jt", 1_000_000),
+            ("ribu", 1_000), ("rb", 1_000),
+            ("k", 1_000), ("m", 1_000_000), ("b", 1_000_000_000), ("t", 1_000_000_000_000),
+        ]
+        mult = 1
+        for suf, factor in suffixes:
+            if s.endswith(suf):
+                mult = factor
+                s = s[: -len(suf)].strip()
+                break
+        if mult == 1:
+            # tanpa suffix → titik/koma = pemisah ribuan
+            digits = re.sub(r"[^\d]", "", s)
+            return int(digits) if digits else 0
+        # dengan suffix → koma/titik = desimal
+        num = s.replace(" ", "").replace(",", ".")
+        if num.count(".") > 1:                       # "1.234.5" → "1234.5"
+            head, _, tail = num.rpartition(".")
+            num = head.replace(".", "") + "." + tail
+        try:
+            return int(round(float(num) * mult))
+        except (ValueError, TypeError):
+            digits = re.sub(r"[^\d]", "", s)
+            return int(digits) * mult if digits else 0
+
+    # ── DOM STATS FALLBACK (saat SSR diramping / API detail diblokir) ──
+    def _extract_stats_from_dom(self) -> Dict:
+        """Baca jumlah like/komentar/share dari tombol aksi yang terlihat di halaman.
+        Fallback terakhir — umum diperlukan di server/VPS (IP datacenter) yang
+        menerima SSR tanpa stats."""
+        try:
+            raw = self.page.evaluate("""() => {
+                const out = {};
+                document.querySelectorAll('[data-e2e$="-count"]').forEach(el => {
+                    const k = el.getAttribute('data-e2e') || '';
+                    const t = (el.textContent || '').trim();
+                    if (k && t && !(k in out)) out[k] = t;
+                });
+                return out;
+            }""") or {}
+        except Exception:
+            return {}
+
+        def g(*keys):
+            for k in keys:
+                if raw.get(k):
+                    return self._parse_count_text(raw[k])
+            return 0
+
+        return {
+            "digg_count":    g("like-count", "browse-like-count"),
+            "comment_count": g("comment-count", "browse-comment-count"),
+            "share_count":   g("share-count"),
+            "collect_count": g("collect-count", "undefined-count"),
+        }
+
     def _resolve_metadata(self, parsed: Dict) -> Dict:
         """Resolusi metadata lengkap: baca SSR → kalau stats masih 0 → coba API.
         Dipakai BERSAMA oleh scrape_post_comments & checkpoint."""
@@ -663,6 +732,18 @@ class TikTokScraperV58(TikTokCheckpointMixin):
                     meta[k] = api_meta[k]
             if not meta.get("video_id"):
                 meta["video_id"] = api_meta.get("video_id") or vid
+
+        # ── Fallback DOM: likes/komentar/share dari tombol aksi yang terlihat ──
+        # Dipakai saat SSR & API gagal (lazim di VPS) → minimal likes/komentar/share keisi.
+        if not (meta.get("digg_count") and meta.get("share_count")):
+            dom = self._extract_stats_from_dom()
+            if dom:
+                for k in ("digg_count", "comment_count", "share_count", "collect_count"):
+                    if not meta.get(k) and dom.get(k):
+                        meta[k] = dom[k]
+                print(Fore.CYAN + f"   🔎 DOM stats → likes={meta.get('digg_count', 0):,} "
+                                  f"komentar={meta.get('comment_count', 0):,} "
+                                  f"share={meta.get('share_count', 0):,}")
 
         if not meta.get("video_id"):
             meta["video_id"] = vid
