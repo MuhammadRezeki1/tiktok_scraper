@@ -42,7 +42,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     <div className="flex min-h-screen">
       {/* Sidebar */}
       <aside
-        className={`relative flex-shrink-0 overflow-hidden border-r border-white/[0.07] bg-slate-950/90 transition-all duration-300 ease-in-out ${
+        className={`relative flex-shrink-0 overflow-hidden border-r border-white/[0.07] bg-white/70 backdrop-blur-xl transition-all duration-300 ease-in-out ${
           sidebarOpen ? "w-64 p-5" : "w-16 p-3"
         }`}>
         <div className={`flex items-center justify-between ${sidebarOpen ? "mb-8" : "mb-6"}`}>
@@ -61,7 +61,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <button
             type="button"
             onClick={() => setSidebarOpen(open => !open)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-ttcyan"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-700 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-ttcyan"
             aria-label={sidebarOpen ? "Sembunyikan sidebar" : "Tampilkan sidebar"}
           >
             {sidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
@@ -112,7 +112,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 href={item.href}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
                   active
-                    ? "bg-white/10 text-white border border-white/10"
+                    ? "bg-ttcyan/10 text-slate-900 font-medium border border-ttcyan/25"
                     : "text-white/50 hover:text-white/80 hover:bg-white/[0.04] border border-transparent"
                 } ${sidebarOpen ? "justify-start" : "justify-center"}`}
               >

@@ -7,6 +7,7 @@ import {
 import { BarChart3, RefreshCw, MessageSquare, Film, Loader2 } from "lucide-react"
 import { listOutputFiles, getOutputFile } from "@/lib/api"
 import type { VideoResult, SentimentSummary, OutputFile } from "@/lib/types"
+import { saveResult, loadResult, clearResult } from "@/lib/resultStore"
 
 // ── Local types ───────────────────────────────────────────────
 
@@ -143,8 +144,8 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function load() {
-    setLoading(true)
+  async function load(showSpinner = true) {
+    if (showSpinner) setLoading(true)
     setError(null)
     try {
       const filesResp = await listOutputFiles()
@@ -177,10 +178,13 @@ export default function AnalyticsPage() {
 
       if (videos.length === 0) {
         setData(null)
+        clearResult("analytics")
         return
       }
 
-      setData(aggregateVideos(videos))
+      const agg = aggregateVideos(videos)
+      setData(agg)
+      saveResult("analytics", agg)   // ← cache supaya tampil instan saat balik ke menu ini
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Terjadi kesalahan")
     } finally {
@@ -189,7 +193,11 @@ export default function AnalyticsPage() {
   }
 
   useEffect(() => {
-    load()
+    // Tampilkan cache dulu (kalau ada) supaya tidak ada kedip loading saat balik ke menu,
+    // lalu refresh diam-diam di belakang. Tanpa cache → tampilkan spinner seperti biasa.
+    const cached = loadResult<AnalyticsData>("analytics")
+    if (cached) { setData(cached); setLoading(false) }
+    load(!cached)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -224,7 +232,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
         <button
-          onClick={load}
+          onClick={() => load()}
           disabled={loading}
           className="btn-glass flex items-center gap-2 text-sm"
         >
@@ -297,17 +305,17 @@ export default function AnalyticsPage() {
                 <BarChart data={chartData}>
                   <XAxis
                     dataKey="name"
-                    tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
+                    tick={{ fill: "rgba(15,23,42,0.65)", fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }}
+                    tick={{ fill: "rgba(15,23,42,0.4)", fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
-                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                    cursor={{ fill: "rgba(15,23,42,0.05)" }}
                     contentStyle={{
                       background: "rgba(0,0,0,0.85)",
                       border: "1px solid rgba(255,255,255,0.1)",

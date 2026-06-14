@@ -262,7 +262,7 @@ export interface BatchScrapeData {
 // ── JOB SYSTEM (scrape jobs) ──────────────────────────────────────────────
 
 export type JobStatus = "queued" | "running" | "done" | "error"
-export type JobKind = "single" | "batch" | "profile" | "unified" | "checkpoint"
+export type JobKind = "single" | "batch" | "profile" | "unified" | "checkpoint" | "deep"
 
 export interface JobStartResponse {
   job_id: string

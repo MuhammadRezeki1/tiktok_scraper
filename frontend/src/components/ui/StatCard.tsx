@@ -2,9 +2,9 @@
 type Color = "cyan" | "red" | "white" | "purple" | "green"
 
 const COLORS: Record<Color, string> = {
-  cyan: "#00F2EA",
+  cyan: "#0891b2",   // cyan diturunkan agar kontras di latar terang
   red: "#FF0050",
-  white: "#FFFFFF",
+  white: "#0f172a",  // "white" kini = teks utama gelap (tema terang)
   purple: "#A855F7",
   green: "#22C55E",
 }

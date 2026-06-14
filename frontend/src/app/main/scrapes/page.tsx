@@ -14,9 +14,18 @@ import { SentimentChart } from "@/components/features/SentimentChart"
 import { CommentList }    from "@/components/features/CommentList"
 import { TikTokLogo }     from "@/components/ui/TikTokLogo"
 import { scrapeStore }    from "@/lib/scrapeStore"
+import { saveResult, loadResult, clearResult } from "@/lib/resultStore"
 
 type Mode = "single" | "batch"
 type ScrapeType = "unified" | "checkpoint"
+
+// Output halaman ini yang dipersist supaya tidak hilang saat pindah menu.
+interface VideoPageState {
+  mode:         Mode
+  result:       VideoResult | null
+  batchResults: BatchItem[] | null
+  batchSummary: { total: number; success: number; failed: number } | null
+}
 
 function useScrapeStatus() {
   return useSyncExternalStore(
@@ -309,18 +318,36 @@ export default function ScrapeVideoPage() {
   const recoveredRef = useRef(false)
 
   function applyBatch(data: BatchScrapeData) {
-    setBatchResults(data.results || [])
-    setBatchSummary({
-      total:   data.total   ?? (data.results?.length || 0),
-      success: data.success ?? (data.results?.filter(r => r.success).length  || 0),
-      failed:  data.failed  ?? (data.results?.filter(r => !r.success).length || 0),
-    })
+    const results = data.results || []
+    const summary = {
+      total:   data.total   ?? results.length,
+      success: data.success ?? results.filter(r => r.success).length,
+      failed:  data.failed  ?? results.filter(r => !r.success).length,
+    }
+    setBatchResults(results)
+    setBatchSummary(summary)
+    saveResult<VideoPageState>("video", { mode: "batch", result: null, batchResults: results, batchSummary: summary })
+  }
+
+  function applySingle(res: VideoResult) {
+    setResult(res)
+    setShowComments(false)
+    saveResult<VideoPageState>("video", { mode: "single", result: res, batchResults: null, batchSummary: null })
   }
 
   // ── Recovery job aktif setelah refresh ───────────────────────────────────
   useEffect(() => {
     if (recoveredRef.current) return
     recoveredRef.current = true
+
+    // Tampilkan kembali output terakhir (kalau ada) — selamat dari pindah menu / refresh
+    const saved = loadResult<VideoPageState>("video")
+    if (saved) {
+      setMode(saved.mode)
+      setResult(saved.result)
+      setBatchResults(saved.batchResults)
+      setBatchSummary(saved.batchSummary)
+    }
 
     const active = scrapeStore.rehydrate()
     if (!active) return
@@ -334,13 +361,14 @@ export default function ScrapeVideoPage() {
       pollJob<VideoResult>(active.jobId, {
         timeoutMs: 2 * 60 * 60 * 1000,
         onProgress: j => {
+          scrapeStore.keepAlive(j.job_id)
           if (j.status === "running")
             setWarning("Sedang scraping... (boleh refresh, proses tetap jalan)")
         },
       })
         .then(job => {
           if (job.status === "error") throw new Error(job.error || "Scrape gagal")
-          if (job.result) { setResult(job.result); setShowComments(false) }
+          if (job.result) applySingle(job.result)
           setWarning("")
         })
         .catch((e: unknown) => setError(e instanceof Error ? e.message : "Gagal melanjutkan scrape"))
@@ -353,6 +381,7 @@ export default function ScrapeVideoPage() {
 
       pollJob<BatchScrapeData>(active.jobId, {
         onProgress: j => {
+          scrapeStore.keepAlive(j.job_id)
           if (j.status === "running")
             setWarning("Batch berjalan... (boleh refresh, proses tetap jalan)")
         },
@@ -366,7 +395,8 @@ export default function ScrapeVideoPage() {
         .finally(() => { setLoading(false); scrapeStore.finish() })
 
     } else {
-      setWarning(`Sedang ada scrape profil (${active.label}). Tunggu selesai.`)
+      const what = active.kind === "profile" ? "scrape profil" : "scraping lain"
+      setWarning(`Sedang ada ${what} (${active.label}). Tunggu selesai.`)
     }
   }, [])
 
@@ -386,6 +416,7 @@ export default function ScrapeVideoPage() {
 
     setError(""); setWarning("")
     setResult(null); setBatchResults(null); setBatchSummary(null); setOpenComments(null)
+    clearResult("video")   // ← scraping video baru → refresh output lama
     setLoading(true)
 
     try {
@@ -409,12 +440,13 @@ export default function ScrapeVideoPage() {
         const job = await pollJob<VideoResult>(jobId, {
           timeoutMs: scrapeType === "checkpoint" ? 2 * 60 * 60 * 1000 : undefined,
           onProgress: j => {
+            scrapeStore.keepAlive(j.job_id)
             if (j.status === "running")
               setWarning("Sedang scraping... (boleh refresh, proses tetap jalan)")
           },
         })
         if (job.status === "error") throw new Error(job.error || "Scrape gagal")
-        if (job.result) { setResult(job.result); setShowComments(false) }
+        if (job.result) applySingle(job.result)
         setWarning("")
 
       } else {
@@ -431,6 +463,7 @@ export default function ScrapeVideoPage() {
 
         const job = await pollJob<BatchScrapeData>(jobId, {
           onProgress: j => {
+            scrapeStore.keepAlive(j.job_id)
             if (j.status === "running")
               setWarning("Batch berjalan... (boleh refresh, proses tetap jalan)")
           },
@@ -496,7 +529,9 @@ export default function ScrapeVideoPage() {
             onClick={() => !disabled && setMode(m)}
             disabled={disabled}
             className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${
-              mode === m ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
+              mode === m
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-900"
             } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {m === "single" ? "🔗 Single URL" : "📋 Batch URLs"}

@@ -134,6 +134,19 @@ export const scrapeStore = {
   },
 
   /**
+   * Segarkan timestamp job aktif supaya tidak dianggap stale saat masih berjalan.
+   * Dipanggil tiap progress poll untuk job panjang (deep search / checkpoint) yang
+   * bisa melewati MAX_AGE_MS — tanpa ini lock bisa lepas di tengah jalan.
+   * No-op kalau jobId tidak cocok dengan job aktif.
+   */
+  keepAlive(jobId: string) {
+    if (state.active && state.active.jobId === jobId) {
+      state.active.startedAt = Date.now()
+      saveToStorage(state.active)
+    }
+  },
+
+  /**
    * Tandai job selesai (sukses / gagal / dibatalkan).
    * Wajib dipanggil di finally block agar store tidak stuck.
    */

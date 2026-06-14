@@ -7,6 +7,7 @@ import { listProfiles, scrapeProfile, pollJob } from "@/lib/api"
 import type { TrackedProfile, ProfileData, ProfileResult, Job } from "@/lib/types"
 import { TikTokLogo } from "@/components/ui/TikTokLogo"
 import { scrapeStore } from "@/lib/scrapeStore"
+import { saveResult, loadResult, clearResult } from "@/lib/resultStore"
 
 function useScrapeStatus() {
   return useSyncExternalStore(
@@ -56,6 +57,7 @@ export default function ProfilesPage() {
     const prof = (res?.data ?? null) as ProfileData | null
     if (!prof || !prof.username) throw new Error(res?.error || "Data profil kosong")
     setScrapeResult(prof)
+    saveResult("profile", prof)   // ← persist supaya tidak hilang saat pindah menu
     reload()
   }
 
@@ -66,6 +68,10 @@ export default function ProfilesPage() {
 
     if (recoveredRef.current) return
     recoveredRef.current = true
+
+    // Tampilkan kembali output terakhir (kalau ada) — selamat dari pindah menu / refresh
+    const saved = loadResult<ProfileData>("profile")
+    if (saved) setScrapeResult(saved)
 
     const active = scrapeStore.rehydrate()
     if (!active) return
@@ -121,6 +127,7 @@ export default function ProfilesPage() {
     setError("")
     setWarning("")
     setScrapeResult(null)
+    clearResult("profile")   // ← scraping profil baru → refresh output lama
     setScraping(true)
 
     try {
@@ -176,16 +183,16 @@ export default function ProfilesPage() {
         </div>
       </div>
 
-      {/* Banner: ada scrape VIDEO yang sedang jalan */}
+      {/* Banner: ada scraping fitur LAIN yang sedang jalan */}
       {busyVideo && (
         <div className="glass-card p-4 mb-6 flex items-start gap-3 border border-yellow-500/20">
           <Clock size={18} className="text-yellow-400 flex-shrink-0 mt-0.5 animate-pulse" />
           <div className="flex-1">
             <p className="text-sm text-yellow-300 font-medium">
-              Sedang scrape video: {activeJob?.label}
+              Sedang ada scraping lain berjalan{activeJob?.label ? `: ${activeJob.label}` : ""}
             </p>
             <p className="text-xs text-white/50 mt-0.5">
-              Scrape profil tidak bisa dijalankan bersamaan. Tunggu sampai video selesai.
+              Scrape profil tidak bisa dijalankan bersamaan. Tunggu sampai proses itu selesai.
             </p>
             <button
               onClick={() => router.push("/main/files")}

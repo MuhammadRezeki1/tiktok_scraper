@@ -15,10 +15,10 @@ call .venv\Scripts\activate
 echo.
 echo ====================================================
 echo   TIKTOK SCRAPER BRIDGE
-echo   URL  : http://localhost:8000
-echo   Docs : http://localhost:8000/docs
+echo   URL  : http://localhost:8001
+echo   Docs : http://localhost:8001/docs
 echo ====================================================
 echo.
 
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 8001
 pause

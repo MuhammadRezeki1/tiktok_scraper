@@ -5,7 +5,7 @@
 // TikTok Search Page — Hashtag | Keyword | Deep Search
 // ══════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from "react"
 import {
   Hash, Search, Zap, ChevronDown, ChevronUp,
   Download, RefreshCw, X, AlertCircle, Clock,
@@ -35,11 +35,30 @@ import type {
   SuggestedHashtag,
 } from "@/lib/types"
 import { TikTokLogo } from "@/components/ui/TikTokLogo"
+import { saveResult, loadResult, clearResult } from "@/lib/resultStore"
+import { scrapeStore } from "@/lib/scrapeStore"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type SearchMode = "hashtag" | "keyword" | "deep"
 type DeepMode   = "hashtag" | "keyword"
+
+// Status lock global — true kalau ADA scraping (fitur manapun) yang berjalan.
+function useScrapeStatus() {
+  return useSyncExternalStore(
+    scrapeStore.subscribe,
+    () => scrapeStore.isBusy(),
+    () => false,
+  )
+}
+
+// Output halaman ini yang dipersist supaya tidak hilang saat pindah menu.
+interface SearchPageState {
+  posts:       SearchPost[]
+  hashtagMeta: Partial<HashtagSearchResult> | null
+  keywordMeta: Partial<KeywordSearchResult> | null
+  suggested:   SuggestedHashtag[]
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -115,7 +134,7 @@ function PostCard({ post, index }: { post: SearchPost; index: number }) {
     <div className="glass-card group relative overflow-hidden hover:border-ttcyan/30 transition-all duration-200">
       {/* Rank badge */}
       <div className="absolute top-3 left-3 z-10">
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white/60 backdrop-blur-sm">
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white backdrop-blur-sm">
           #{index + 1}
         </span>
       </div>
@@ -130,7 +149,7 @@ function PostCard({ post, index }: { post: SearchPost; index: number }) {
             onError={() => setImgErr(true)}
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-white/5 to-transparent">
+          <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-slate-100">
             <Play size={28} className="text-white/20" />
             {post.duration > 0 && (
               <span className="text-xs text-white/30">{fmtDuration(post.duration)}</span>
@@ -140,7 +159,7 @@ function PostCard({ post, index }: { post: SearchPost; index: number }) {
 
         {/* Duration overlay */}
         {post.duration > 0 && (
-          <div className="absolute bottom-2 right-2 text-[10px] bg-black/70 text-white/80 px-1.5 py-0.5 rounded backdrop-blur-sm">
+          <div className="absolute bottom-2 right-2 text-[10px] bg-black/70 text-white px-1.5 py-0.5 rounded backdrop-blur-sm">
             {fmtDuration(post.duration)}
           </div>
         )}
@@ -162,7 +181,7 @@ function PostCard({ post, index }: { post: SearchPost; index: number }) {
       <div className="p-3">
         {/* Author */}
         <div className="flex items-center gap-1.5 mb-2">
-          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-ttred/40 to-ttcyan/40 flex items-center justify-center flex-shrink-0">
+          <div className="w-5 h-5 rounded-full bg-cyan-500/15 flex items-center justify-center flex-shrink-0">
             <span className="text-[8px] text-white/80 font-bold">
               {(post.username?.[0] ?? "?").toUpperCase()}
             </span>
@@ -277,7 +296,7 @@ function PostsGrid({
       <div className="glass-card p-3 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 text-sm text-white/60">
           <BarChart2 size={14} className="text-ttcyan" />
-          <span className="font-medium text-white">{posts.length}</span> video ditemukan
+          <span className="font-medium text-slate-900">{posts.length}</span> video ditemukan
         </div>
 
         {/* Filter */}
@@ -423,7 +442,7 @@ function DeepSearchJobCard({
           </div>
           <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-ttred to-ttcyan transition-all duration-500"
+              className="h-full rounded-full bg-cyan-600 transition-all duration-500"
               style={{ width: `${Math.max(4, pct)}%` }}
             />
           </div>
@@ -483,12 +502,24 @@ export default function TikTokSearchPage() {
   const [deepJobsLoading, setDeepJobsLoading] = useState(false)
   const [activeDeepJobId, setActiveDeepJobId] = useState<string | null>(null)
   const deepPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const recoveredRef = useRef(false)
 
   // UI state
   const [loading, setLoading]   = useState(false)
   const [csvLoading, setCsvLoading] = useState(false)
   const [error, setError]       = useState("")
   const [warning, setWarning]   = useState("")
+
+  // ── Lock global lintas fitur ─────────────────────────────────────────────
+  const globalBusy = useScrapeStatus()
+  const activeJob  = scrapeStore.getActive()
+  // Ada scraping fitur LAIN (profil/video) yang berjalan → deep search harus nunggu.
+  const busyOther  = globalBusy && activeJob?.kind !== "deep"
+
+  // Lepas lock global kalau job deep yang kita pegang sudah selesai.
+  function releaseDeepLock(jobId: string) {
+    if (scrapeStore.getActive()?.jobId === jobId) scrapeStore.finish()
+  }
 
   // ── Load deep jobs on mount ─────────────────────────────────────────────
 
@@ -497,7 +528,22 @@ export default function TikTokSearchPage() {
     setDeepJobsLoading(true)
     try {
       const resp = await listDeepSearchJobs()
-      if (resp.success) setDeepJobs(resp.data.jobs || [])
+      if (resp.success) {
+        const jobs = resp.data.jobs || []
+        setDeepJobs(jobs)
+
+        // Resume job yang MASIH berjalan di server (mis. setelah pindah menu / refresh).
+        // Jobnya tetap jalan di backend — kita sambung lagi polling + lock global di frontend.
+        const inProgress = jobs.find(
+          j => j.status === "running" || j.status === "queued"
+        )
+        if (inProgress) {
+          setActiveDeepJobId(prev => prev ?? inProgress.job_id)
+          setLoading(true)
+          // Re-assert lock supaya fitur lain ikut tahu masih ada deep search berjalan.
+          scrapeStore.begin("deep", inProgress.query, inProgress.job_id)
+        }
+      }
     } catch {
       // silent
     } finally {
@@ -508,6 +554,30 @@ export default function TikTokSearchPage() {
   useEffect(() => {
     if (mode === "deep") loadDeepJobs()
   }, [mode]) // eslint-disable-line
+
+  // Tampilkan kembali output terakhir (posts) + sambung lagi deep search yang sedang jalan
+  // — selamat dari pindah menu / refresh.
+  useEffect(() => {
+    const saved = loadResult<SearchPageState>("search")
+    if (saved) {
+      setPosts(saved.posts || [])
+      setHashtagMeta(saved.hashtagMeta)
+      setKeywordMeta(saved.keywordMeta)
+      setSuggested(saved.suggested || [])
+    }
+
+    if (recoveredRef.current) return
+    recoveredRef.current = true
+
+    // Lock global tersimpan di localStorage → bertahan saat refresh. Kalau yang aktif
+    // adalah deep search, langsung sambung polling-nya (loadDeepJobs juga jadi backup).
+    const active = scrapeStore.rehydrate()
+    if (active?.kind === "deep") {
+      setActiveDeepJobId(active.jobId)
+      setLoading(true)
+      setWarning("Melanjutkan deep search yang sedang berjalan...")
+    }
+  }, [])
 
   // ── Poll active deep job ───────────────────────────────────────────────
 
@@ -520,20 +590,26 @@ export default function TikTokSearchPage() {
         if (!resp.success) return
 
         const job = resp.data
+        // Upsert: kalau job belum ada di daftar (mis. hasil resume), tambahkan.
         setDeepJobs(prev =>
-          prev.map(j => (j.job_id === activeDeepJobId ? job : j))
+          prev.some(j => j.job_id === job.job_id)
+            ? prev.map(j => (j.job_id === job.job_id ? job : j))
+            : [job, ...prev]
         )
 
         if (["completed", "failed", "cancelled"].includes(job.status)) {
           setActiveDeepJobId(null)
           setLoading(false)
+          setWarning("")
+          releaseDeepLock(job.job_id)   // ← lepas lock global, fitur lain bisa jalan
           if (job.status === "failed") {
             setError(`Deep search gagal: ${job.error || "unknown error"}`)
           }
           return
         }
 
-        // Keep polling
+        // Masih jalan → segarkan lock supaya tidak dianggap stale, lalu lanjut polling
+        scrapeStore.keepAlive(job.job_id)
         deepPollRef.current = setTimeout(poll, 3000)
       } catch {
         deepPollRef.current = setTimeout(poll, 5000)
@@ -554,29 +630,35 @@ export default function TikTokSearchPage() {
 
     setError(""); setWarning(""); setLoading(true)
     setPosts([]); setHashtagMeta(null); setKeywordMeta(null)
+    clearResult("search")   // ← pencarian baru → refresh output lama
 
     try {
       if (mode === "hashtag") {
         const resp = await searchHashtag(q, maxPosts)
         if (!resp.success) throw new Error(resp.message)
         const data = resp.data as HashtagSearchResult
-        setPosts(data.posts || [])
+        const newPosts = data.posts || []
+        setPosts(newPosts)
         setHashtagMeta(data)
         // Also grab suggested from discover
+        let newSuggested: SuggestedHashtag[] = []
         try {
           const disc = await discoverHashtags(q)
-          if (disc.success) {
-            setSuggested((disc.data as any)?.hashtags || [])
-          }
+          if (disc.success) newSuggested = (disc.data as any)?.hashtags || []
         } catch { /* ok */ }
+        setSuggested(newSuggested)
+        saveResult<SearchPageState>("search", { posts: newPosts, hashtagMeta: data, keywordMeta: null, suggested: newSuggested })
 
       } else if (mode === "keyword") {
         const resp = await searchKeyword(q, maxPosts, maxHashtags)
         if (!resp.success) throw new Error(resp.message)
         const data = resp.data as KeywordSearchResult
-        setPosts(data.posts || [])
+        const newPosts = data.posts || []
+        const newSuggested = data.suggested_hashtags || []
+        setPosts(newPosts)
         setKeywordMeta(data)
-        setSuggested(data.suggested_hashtags || [])
+        setSuggested(newSuggested)
+        saveResult<SearchPageState>("search", { posts: newPosts, hashtagMeta: null, keywordMeta: data, suggested: newSuggested })
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Terjadi kesalahan")
@@ -588,6 +670,12 @@ export default function TikTokSearchPage() {
   async function handleDeepSearch() {
     const q = query.trim().replace(/^#/, "")
     if (!q) { setError("Masukkan hashtag atau keyword"); return }
+
+    // Mutual-exclusion: tunggu scraping lain (profil/video/deep) selesai dulu.
+    if (scrapeStore.isBusy()) {
+      setWarning("Tunggu dulu — proses scraping sebelumnya belum selesai.")
+      return
+    }
 
     setError(""); setWarning(""); setLoading(true)
 
@@ -620,6 +708,13 @@ export default function TikTokSearchPage() {
           percentage:       0,
         },
       }
+      // Daftarkan ke lock global supaya fitur lain ikut menunggu.
+      if (!scrapeStore.begin("deep", q, jobId)) {
+        setWarning("Tunggu dulu — proses scraping sebelumnya belum selesai.")
+        setLoading(false)
+        return
+      }
+
       setDeepJobs(prev => [newJob, ...prev])
       setActiveDeepJobId(jobId)
       setWarning(`Deep search dimulai (Job ID: ${jobId})`)
@@ -633,10 +728,13 @@ export default function TikTokSearchPage() {
     setLoading(true)
     setError("")
     setPosts([]); setHashtagMeta(null); setKeywordMeta(null)
+    clearResult("search")   // ← lihat posts job lain → refresh output lama
     try {
       const resp = await getDeepSearchJobPosts(jobId)
       if (!resp.success) throw new Error(resp.message)
-      setPosts((resp.data as any).posts || [])
+      const newPosts = (resp.data as any).posts || []
+      setPosts(newPosts)
+      saveResult<SearchPageState>("search", { posts: newPosts, hashtagMeta: null, keywordMeta: null, suggested: [] })
       setWarning(`Menampilkan hasil deep search job: ${jobId}`)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal memuat posts")
@@ -651,7 +749,9 @@ export default function TikTokSearchPage() {
       if (activeDeepJobId === jobId) {
         setActiveDeepJobId(null)
         setLoading(false)
+        setWarning("")
       }
+      releaseDeepLock(jobId)   // ← lepas lock global
       await loadDeepJobs()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal cancel job")
@@ -685,14 +785,22 @@ export default function TikTokSearchPage() {
   // ── Render ──────────────────────────────────────────────────────────────
 
   const isDeep    = mode === "deep"
-  const canSearch = !loading
+  const canSearch = !loading && !busyOther
+
+  // Urutkan job berdasarkan waktu dibuat — TERBARU di atas. Backend mengurutkan by
+  // nama file (job_id), bukan kronologis, jadi tanpa ini scraping baru bisa nyangkut
+  // di tengah. Dengan ini: scraping baru selalu #1, yang lama geser ke bawah.
+  const sortedDeepJobs = [...deepJobs].sort(
+    (a, b) =>
+      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  )
 
   return (
     <div className="p-8 max-w-7xl">
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-ttred/30 to-ttcyan/30 flex items-center justify-center border border-white/10">
+        <div className="w-10 h-10 rounded-2xl bg-cyan-500/12 flex items-center justify-center border border-white/10">
           <Search size={20} className="text-white/80" />
         </div>
         <div>
@@ -707,11 +815,26 @@ export default function TikTokSearchPage() {
       <div className="glass-card p-1 inline-flex mb-6 gap-1">
         <button
           onClick={() => { setMode("deep"); setError(""); setWarning("") }}
-          className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium transition-all bg-gradient-to-r from-ttred/20 to-ttcyan/20 text-white border border-ttcyan/20`}
+          className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium transition-all bg-cyan-500/12 text-slate-900 border border-cyan-600/30`}
         >
           🚀 Deep Search
         </button>
       </div>
+
+      {/* Banner: ada scraping fitur LAIN yang sedang jalan */}
+      {busyOther && (
+        <div className="glass-card p-4 mb-6 flex items-start gap-3 border border-yellow-500/20">
+          <Clock size={18} className="text-yellow-400 flex-shrink-0 mt-0.5 animate-pulse" />
+          <div className="flex-1">
+            <p className="text-sm text-yellow-300 font-medium">
+              Sedang ada scraping lain berjalan{activeJob?.label ? `: ${activeJob.label}` : ""}
+            </p>
+            <p className="text-xs text-white/50 mt-0.5">
+              Deep search tidak bisa dijalankan bersamaan. Tunggu sampai proses itu selesai.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Search Card */}
       <div className="glass-card p-6 mb-6">
@@ -726,7 +849,7 @@ export default function TikTokSearchPage() {
                   key={dm}
                   onClick={() => setDeepMode(dm)}
                   className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    deepMode === dm ? "bg-white/10 text-white" : "text-white/40 hover:text-white/60"
+                    deepMode === dm ? "bg-white/10 text-slate-900" : "text-white/40 hover:text-white/60"
                   }`}
                 >
                   {dm === "hashtag" ? "# Hashtag" : "🔍 Keyword"}
@@ -860,11 +983,13 @@ export default function TikTokSearchPage() {
           disabled={!canSearch}
           className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
             isDeep
-              ? "bg-gradient-to-r from-ttred/80 to-ttcyan/80 hover:from-ttred hover:to-ttcyan text-white"
+              ? "bg-cyan-700 hover:bg-cyan-800 text-white"
               : "btn-tt"
           }`}
         >
-          {loading ? (
+          {busyOther ? (
+            <><Loader2 size={16} className="animate-spin" /> Menunggu...</>
+          ) : loading ? (
             <><Loader2 size={16} className="animate-spin" /> {isDeep ? "Memulai..." : "Mencari..."}</>
           ) : isDeep ? (
             <><Zap size={16} /> Mulai Deep Search</>
@@ -915,7 +1040,7 @@ export default function TikTokSearchPage() {
             </div>
           )}
 
-          {deepJobs.map(job => (
+          {sortedDeepJobs.map(job => (
             <DeepSearchJobCard
               key={job.job_id}
               job={job}
@@ -934,7 +1059,7 @@ export default function TikTokSearchPage() {
           {hashtagMeta && (
             <>
               <div>
-                <p className="text-lg font-bold text-white">
+                <p className="text-lg font-bold text-slate-900">
                   #{hashtagMeta.hashtag}
                 </p>
                 <p className="text-[10px] text-white/30">hashtag</p>
@@ -952,7 +1077,7 @@ export default function TikTokSearchPage() {
                 </div>
               ) : null}
               <div>
-                <p className="font-semibold text-white">{hashtagMeta.total_fetched ?? posts.length}</p>
+                <p className="font-semibold text-slate-900">{hashtagMeta.total_fetched ?? posts.length}</p>
                 <p className="text-[10px] text-white/30">berhasil diambil</p>
               </div>
               {hashtagMeta.method && (
@@ -967,11 +1092,11 @@ export default function TikTokSearchPage() {
           {keywordMeta && (
             <>
               <div>
-                <p className="text-lg font-bold text-white">"{keywordMeta.query}"</p>
+                <p className="text-lg font-bold text-slate-900">"{keywordMeta.query}"</p>
                 <p className="text-[10px] text-white/30">keyword</p>
               </div>
               <div>
-                <p className="font-semibold text-white">{keywordMeta.total_fetched ?? posts.length}</p>
+                <p className="font-semibold text-slate-900">{keywordMeta.total_fetched ?? posts.length}</p>
                 <p className="text-[10px] text-white/30">post ditemukan</p>
               </div>
               {(keywordMeta.searched_hashtags?.length ?? 0) > 0 && (
@@ -1053,7 +1178,7 @@ export default function TikTokSearchPage() {
       {/* ─── INITIAL EMPTY (no search yet) ────────────────────────────────── */}
       {!loading && posts.length === 0 && !hashtagMeta && !keywordMeta && !isDeep && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-ttred/20 to-ttcyan/20 flex items-center justify-center mb-5 border border-white/10">
+          <div className="w-20 h-20 rounded-3xl bg-cyan-500/10 flex items-center justify-center mb-5 border border-white/10">
             <Hash size={36} className="text-white/30" />
           </div>
           <p className="text-white/40 text-base font-medium mb-2">

@@ -2,17 +2,27 @@
 # TikTok Scraper — Docker Compose
 # ═════════════════════════════════════════════════════════════════════════════
 #
-# Cara pakai:
-#   1. Edit .env (atur APP_PORT, BACKEND_PORT, dll)
-#   2. docker compose up --build -d
-#   3. Buka http://<host>:${APP_PORT} (default: http://localhost:3000)
+# Image sudah dipublish di Docker Hub:
+#   rezeki1/tiktok-scraper-backend:latest
+#   rezeki1/tiktok-scraper-frontend:latest
 #
-# Untuk push ke Docker Hub:
+# ── DEPLOY DI VPS (cukup ini — TIDAK perlu build) ───────────────────────────
+#   1. git clone https://github.com/MuhammadRezeki1/tiktok_scraper.git
+#   2. cd tiktok_scraper
+#   3. cp .env.example .env   lalu edit. WAJIB untuk VPS:
+#         TIKTOK_HEADLESS=True
+#         CHROME_NO_SANDBOX=True
+#         SENTIMENT_MODE=rule_only
+#         CORS_ORIGINS=https://domain-anda.com   (atau * untuk uji coba)
+#   4. docker compose pull          # tarik image dari Docker Hub
+#   5. docker compose up -d
+#   6. Buka http://<ip-vps>:${APP_PORT:-3000}
+#
+#   Update versi baru:  docker compose pull && docker compose up -d
+#
+# ── BUILD & PUSH dari desktop (maintainer) ──────────────────────────────────
 #   docker compose build
-#   docker tag tiktok-scraper-ui-backend rezeki1/tiktok-scraper-backend:latest
-#   docker tag tiktok-scraper-ui-frontend rezeki1/tiktok-scraper-frontend:latest
-#   docker push rezeki1/tiktok-scraper-backend:latest
-#   docker push rezeki1/tiktok-scraper-frontend:latest
+#   docker compose push
 # ═════════════════════════════════════════════════════════════════════════════
 
 services:

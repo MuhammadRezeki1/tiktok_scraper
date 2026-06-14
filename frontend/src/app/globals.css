@@ -6,6 +6,17 @@
   --font-display: "Space Mono", ui-monospace, monospace;
   --tt-cyan: #00f2ea;
   --tt-red: #ff0050;
+
+  /* Aksen solid (pengganti gradient) — keluarga teal/cyan */
+  --accent:        #0e7490;  /* tombol/teks aksen */
+  --accent-strong: #155e75;  /* hover */
+
+  /* Palet enterprise light — nuansa putih susu/tulang */
+  --ink:        #0f172a;  /* teks utama */
+  --ink-soft:   #334155;  /* teks sekunder */
+  --ink-muted:  #64748b;  /* teks tersier */
+  --line:       rgba(15, 23, 42, 0.08);   /* hairline border */
+  --surface:    rgba(250, 248, 243, 0.74); /* putih susu */
 }
 
 * { box-sizing: border-box; }
@@ -13,91 +24,102 @@
 html, body {
   padding: 0;
   margin: 0;
-  background: #000;
-  color: #fff;
+  background: #ece9e1;
+  color: var(--ink);
   font-family: ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Atmosfer: dua glow cyan + merah di pojok, khas vibe TikTok */
+/* Kanvas off-white (putih tulang) — tenang, tanpa glow warna */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
-  background:
-    radial-gradient(circle at 12% 8%, rgba(0, 242, 234, 0.10), transparent 40%),
-    radial-gradient(circle at 88% 92%, rgba(255, 0, 80, 0.10), transparent 40%),
-    #000;
+  background: linear-gradient(180deg, #f4f1ea 0%, #e9e6dd 100%);
 }
 
-/* ── Glass surfaces ─────────────────────────────────────── */
+::selection { background: rgba(14, 116, 144, 0.18); color: var(--ink); }
+
+/* ── Glass surfaces (frosted putih premium) ───────────────── */
 .glass {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(12px);
+  background: rgba(250, 248, 243, 0.55);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(12px) saturate(135%);
+  -webkit-backdrop-filter: blur(12px) saturate(135%);
 }
 .glass-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 1rem;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -16px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 /* ── Inputs ─────────────────────────────────────────────── */
 .input-glass {
   width: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(252, 251, 247, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 0.75rem;
   padding: 0.7rem 1rem;
-  color: #fff;
+  color: var(--ink);
   font-size: 0.9rem;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.input-glass::placeholder { color: rgba(255, 255, 255, 0.3); }
-.input-glass:focus { border-color: var(--tt-cyan); }
+.input-glass::placeholder { color: rgba(15, 23, 42, 0.38); }
+.input-glass:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.15);
+}
 
 /* ── Buttons ────────────────────────────────────────────── */
 .btn-glass {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(250, 248, 243, 0.7);
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 0.75rem;
   padding: 0.5rem 0.9rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--ink-soft);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   transition: all 0.2s;
 }
-.btn-glass:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+.btn-glass:hover:not(:disabled) {
+  background: #fdfcf9;
+  border-color: rgba(15, 23, 42, 0.16);
+  color: var(--ink);
+}
 
-/* Tombol aksen TikTok: cyan→merah dengan sedikit glitch shadow */
+/* Tombol aksen — warna dasar solid (tanpa gradient) */
 .btn-tt {
-  background: linear-gradient(95deg, var(--tt-cyan), var(--tt-red));
+  background: var(--accent);
   border: none;
   border-radius: 0.75rem;
-  color: #000;
-  font-weight: 700;
+  color: #fff;
+  font-weight: 600;
   transition: all 0.2s;
-  box-shadow: 0 0 0 0 rgba(0, 242, 234, 0.5);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 10px 22px -12px rgba(14, 116, 144, 0.55);
 }
 .btn-tt:hover:not(:disabled) {
+  background: var(--accent-strong);
   transform: translateY(-1px);
-  box-shadow: -3px 0 12px rgba(255, 0, 80, 0.4), 3px 0 12px rgba(0, 242, 234, 0.4);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1), 0 12px 26px -12px rgba(14, 116, 144, 0.6);
 }
 
-/* Teks gradien TikTok */
+/* Teks aksen — warna solid (tanpa gradient) */
 .tt-text {
-  background: linear-gradient(95deg, var(--tt-cyan), var(--tt-red));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--accent);
 }
 
 /* Progress bar */
 .progress-bar {
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -105,8 +127,9 @@ body::before {
 
 /* Skeleton */
 .skeleton {
-  background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+  background: linear-gradient(90deg, rgba(15,23,42,0.05), rgba(15,23,42,0.09), rgba(15,23,42,0.05));
   background-size: 200% 100%;
+  border-radius: 0.75rem;
   animation: shimmer 1.4s infinite;
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
@@ -114,5 +137,65 @@ body::before {
 @keyframes spin-slow { to { transform: rotate(360deg); } }
 .animate-spin-slow { animation: spin-slow 1.2s linear infinite; }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.16); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.26); }
+
+/* ════════════════════════════════════════════════════════════════
+   LIGHT-THEME REMAP
+   Markup lama memakai utilitas "white/opacity" (warisan tema gelap).
+   Di sini kita petakan ulang ke slate gelap-di-atas-terang supaya
+   tidak perlu menyentuh ratusan className di tiap halaman.
+   Prefix `body` menaikkan specificity agar menang atas utilitas Tailwind.
+   Catatan: `text-white` polos (tanpa /opacity) sengaja TIDAK diubah —
+   dipakai di atas tombol gradient & badge gambar yang harus tetap putih.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Teks */
+body .text-white\/90 { color: #0f172a; }
+body .text-white\/80 { color: #1e293b; }
+body .text-white\/70 { color: #334155; }
+body .text-white\/60 { color: #475569; }
+body .text-white\/50 { color: #64748b; }
+body .text-white\/40 { color: #8693a5; }
+body .text-white\/30 { color: #97a3b4; }
+body .text-white\/25 { color: #a6b1c0; }
+body .text-white\/20 { color: #b3bdca; }
+body .text-white\/10 { color: #ccd4de; }
+
+/* Background fills */
+body .bg-white            { background-color: #faf8f3; }                 /* solid → putih susu */
+body .bg-white\/70        { background-color: rgba(250, 248, 243, 0.72); } /* sidebar frosted */
+body .bg-white\/10        { background-color: rgba(15, 23, 42, 0.06); }
+body .bg-white\/5         { background-color: rgba(15, 23, 42, 0.035); }
+body .bg-white\/\[0\.07\] { background-color: rgba(15, 23, 42, 0.05); }
+body .bg-white\/\[0\.05\] { background-color: rgba(15, 23, 42, 0.04); }
+body .bg-white\/\[0\.04\] { background-color: rgba(15, 23, 42, 0.03); }
+body .bg-white\/\[0\.02\] { background-color: rgba(15, 23, 42, 0.02); }
+body .hover\:bg-white\/10:hover        { background-color: rgba(15, 23, 42, 0.07); }
+body .hover\:bg-white\/\[0\.07\]:hover { background-color: rgba(15, 23, 42, 0.06); }
+
+/* Hover teks: tanpa ini, hover:text-white/* kembali jadi putih asli → hilang
+   di latar terang (mis. tab toggle saat di-hover). */
+body .hover\:text-white\/80:hover { color: #1e293b; }
+body .hover\:text-white\/70:hover { color: #334155; }
+body .hover\:text-white\/60:hover { color: #475569; }
+
+/* Borders */
+body .border-white\/20        { border-color: rgba(15, 23, 42, 0.12); }
+body .border-white\/15        { border-color: rgba(15, 23, 42, 0.10); }
+body .border-white\/10        { border-color: rgba(15, 23, 42, 0.08); }
+body .border-white\/5         { border-color: rgba(15, 23, 42, 0.06); }
+body .border-white\/\[0\.07\] { border-color: rgba(15, 23, 42, 0.06); }
+body .border-white\/\[0\.04\] { border-color: rgba(15, 23, 42, 0.05); }
+
+/* Teks aksen/status: shade tema-gelap (300–400) → shade lebih pekat agar
+   kontras & terbaca di kanvas terang. Hanya warna TEKS yang diubah; tint
+   background/border (mis. bg-emerald-400/10) tetap utuh. */
+body .text-ttcyan      { color: #0891b2; }
+body .text-yellow-300  { color: #b45309; }
+body .text-yellow-400  { color: #b45309; }
+body .text-emerald-400 { color: #059669; }
+body .text-green-400   { color: #16a34a; }
+body .text-red-400     { color: #dc2626; }
